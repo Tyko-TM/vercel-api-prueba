@@ -1,26 +1,48 @@
-// api/index.js - Tu primera API en Vercel conectada a Supabase
-
+// api/index.js - Vercel + Supabase (body parsing seguro + CORS + logs)
 const { createClient } = require('@supabase/supabase-js');
+
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', chunk => (data += chunk));
+    req.on('end', () => {
+      try { resolve(data ? JSON.parse(data) : {}); }
+      catch (e) { reject(new Error('JSON inválido')); }
+    });
+    req.on('error', reject);
+  });
+}
 
 module.exports = async (req, res) => {
   try {
-    // Solo aceptar peticiones POST
+    // CORS básico para poder probar desde navegador y Tampermonkey
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') return res.status(204).end();
+
     if (req.method !== 'POST') {
       return res.status(405).json({ ok: false, error: 'Método no permitido' });
     }
 
-    const { apiKey, payload } = req.body || {};
+    // Lee el body de forma segura
+    const { apiKey, payload } = await readJsonBody(req);
+
     if (!apiKey) {
       return res.status(400).json({ ok: false, error: 'Falta apiKey' });
     }
 
-    // Inicializa Supabase con las variables de entorno (las que ya creaste)
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseServiceRole = process.env.SUPABASE_SERVICE_ROLE;
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE;
 
-    const supabase = createClient(supabaseUrl, supabaseServiceRole);
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE) {
+      console.error('ENV faltantes');
+      return res.status(500).json({ ok: false, error: 'Config del servidor incompleta' });
+    }
 
-    // Busca la apiKey en la tabla api_keys
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
+
+    // Verifica la apiKey
     const { data, error } = await supabase
       .from('api_keys')
       .select('id, owner_name, active')
@@ -28,7 +50,7 @@ module.exports = async (req, res) => {
       .limit(1);
 
     if (error) {
-      console.error(error);
+      console.error('Supabase error:', error);
       return res.status(500).json({ ok: false, error: 'Error de base de datos' });
     }
 
@@ -40,15 +62,15 @@ module.exports = async (req, res) => {
       return res.status(403).json({ ok: false, error: 'apiKey desactivada' });
     }
 
-    // Si todo está bien:
+    // 🔧 Aquí pondrás tu lógica real
     return res.status(200).json({
       ok: true,
       message: `Hola ${data[0].owner_name || 'cliente'}, la API está funcionando 🎉`,
-      payload_recibido: payload || null
+      echo: payload ?? null
     });
 
   } catch (e) {
-    console.error(e);
+    console.error('Handler catch:', e);
     return res.status(500).json({ ok: false, error: 'Error interno del servidor' });
   }
 };

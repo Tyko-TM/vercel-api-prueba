@@ -1,0 +1,8 @@
+{
+  "name": "vercel-api-prueba",
+  "version": "1.0.0",
+  "main": "api/index.js",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0"
+  }
+}
